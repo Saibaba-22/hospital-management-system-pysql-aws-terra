@@ -3,17 +3,17 @@ resource "aws_vpc" "sai01_vpc" {
   cidr_block           = "10.0.0.0/16"
   enable_dns_support   = true
   enable_dns_hostnames = true
-  tags = {  Name = "sai01-vpc"  }
+  tags = {   Name = "sai01-vpc" }
 }
 
 # INTERNET GATEWAY
 resource "aws_internet_gateway" "sai01_igw" {
   vpc_id = aws_vpc.sai01_vpc.id
-  tags = { Name = "sai01-igw"  }
+  tags = {   Name = "sai01-igw" }
 }
 
 # PUBLIC SUBNETS
-resource "aws_subnet" "public_subnet" {
+resource "aws_subnet" "sai01_public_subnet" {
   count = 2
   vpc_id                  = aws_vpc.sai01_vpc.id
   cidr_block              = cidrsubnet(aws_vpc.sai01_vpc.cidr_block, 8, count.index)
@@ -21,18 +21,18 @@ resource "aws_subnet" "public_subnet" {
   map_public_ip_on_launch = true
   tags = {  Name = "public-subnet-${count.index}" 
     "kubernetes.io/cluster/sai011-cluster" = "shared"
-    "kubernetes.io/role/elb"               = "1"
-  }
+    "kubernetes.io/role/elb"               = "1" }
 }
 
 # PRIVATE SUBNETS
-resource "aws_subnet" "private_subnet" {
+resource "aws_subnet" "sai01_private_subnet" {
   count = 2
   vpc_id            = aws_vpc.sai01_vpc.id
   cidr_block        = cidrsubnet(aws_vpc.sai01_vpc.cidr_block, 8, count.index + 10)
   availability_zone = element(["ap-south-1a", "ap-south-1b"], count.index)
   map_public_ip_on_launch = false
-  tags = { Name = "private-subnet-${count.index}" 
+
+  tags = {  Name = "private-subnet-${count.index}" 
     "kubernetes.io/cluster/sai011-cluster" = "shared"
     "kubernetes.io/role/internal-elb"      = "1" }
 }
@@ -48,13 +48,13 @@ resource "aws_route_table" "public_rt" {
     cidr_block                = "10.5.0.0/16"
     vpc_peering_connection_id = aws_vpc_peering_connection.peer.id
   }
-  tags = { Name = "public-route-table"  }
+  tags = {  Name = "public-route-table"  }
 }
 
 # PUBLIC SUBNET ASSOCIATION
 resource "aws_route_table_association" "public_assoc" {
   count = 2
-  subnet_id      = aws_subnet.public_subnet[count.index].id
+  subnet_id      = aws_subnet.sai01_public_subnet[count.index].id
   route_table_id = aws_route_table.public_rt.id
 }
 
@@ -107,7 +107,7 @@ resource "aws_eks_cluster" "sai01" {
   role_arn = local.cluster_role_arn
 
   vpc_config {
-    subnet_ids              = aws_subnet.sai01_subnet[*].id
+   subnet_ids = concat( aws_subnet.sai01_public_subnet[*].id,  aws_subnet.sai01_private_subnet[*].id)
     endpoint_public_access  = true
     endpoint_private_access = true
     security_group_ids      = [aws_security_group.sai01_cluster_sg.id]
@@ -119,7 +119,7 @@ resource "aws_eks_node_group" "sai01" {
   cluster_name    = aws_eks_cluster.sai01.name
   node_group_name = "sai01-node-group"
   node_role_arn   = local.node_role_arn
-  subnet_ids      = aws_subnet.sai01_subnet[*].id
+  subnet_ids = aws_subnet.sai01_private_subnet[*].id
 
   scaling_config {
     desired_size = 1
