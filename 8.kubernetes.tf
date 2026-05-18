@@ -1,61 +1,50 @@
 # VPC
 resource "aws_vpc" "sai01_vpc" {
-  cidr_block           = "10.0.0.0/16"
-  enable_dns_support   = true
-  enable_dns_hostnames = true
-  tags = {   Name = "sai01-vpc" }
+  cidr_block = "10.0.0.0/16"
+  tags = { Name = "sai01-vpc" }
 }
 
-# INTERNET GATEWAY
-resource "aws_internet_gateway" "sai01_igw" {
-  vpc_id = aws_vpc.sai01_vpc.id
-  tags = {   Name = "sai01-igw" }
-}
-
-# PUBLIC SUBNETS
-resource "aws_subnet" "sai01_public_subnet" {
-  count = 2
+#Subnet
+resource "aws_subnet" "sai01_subnet" {
+  count                   = 2
   vpc_id                  = aws_vpc.sai01_vpc.id
   cidr_block              = cidrsubnet(aws_vpc.sai01_vpc.cidr_block, 8, count.index)
   availability_zone       = element(["ap-south-1a", "ap-south-1b"], count.index)
   map_public_ip_on_launch = true
-  tags = {  Name = "public-subnet-${count.index}" 
+
+  tags = {  Name = "sai01-subnet-${count.index}" 
     "kubernetes.io/cluster/sai011-cluster" = "shared"
-    "kubernetes.io/role/elb"               = "1" }
+    "kubernetes.io/role/elb"                  = "1" }
 }
 
-# PRIVATE SUBNETS
-resource "aws_subnet" "sai01_private_subnet" {
-  count = 2
-  vpc_id            = aws_vpc.sai01_vpc.id
-  cidr_block        = cidrsubnet(aws_vpc.sai01_vpc.cidr_block, 8, count.index + 10)
-  availability_zone = element(["ap-south-1a", "ap-south-1b"], count.index)
-  map_public_ip_on_launch = false
-
-  tags = {  Name = "private-subnet-${count.index}" 
-    "kubernetes.io/cluster/sai011-cluster" = "shared"
-    "kubernetes.io/role/internal-elb"      = "1" }
-}
-
-# PUBLIC ROUTE TABLE
-resource "aws_route_table" "public_rt" {
+#IG
+resource "aws_internet_gateway" "sai01_igw" {
   vpc_id = aws_vpc.sai01_vpc.id
+  tags = {  Name = "sai01-igw"   }
+}
+
+# Route Table 
+resource "aws_route_table" "sai01_route_table" {
+  vpc_id = aws_vpc.sai01_vpc.id
+
   route {
     cidr_block = "0.0.0.0/0"
     gateway_id = aws_internet_gateway.sai01_igw.id
   }
-  route {
+
+  # If main Ec2 is in saparate VPC need this block to route traffic and communication for kube to ec2
+   route {
     cidr_block                = "10.5.0.0/16"
     vpc_peering_connection_id = aws_vpc_peering_connection.peer.id
   }
-  tags = {  Name = "public-route-table"  }
+  tags = {  Name = "sai01-route-table"  }
 }
 
-# PUBLIC SUBNET ASSOCIATION
-resource "aws_route_table_association" "public_assoc" {
-  count = 2
-  subnet_id      = aws_subnet.sai01_public_subnet[count.index].id
-  route_table_id = aws_route_table.public_rt.id
+# Subnet Associate to Route Table 
+resource "aws_route_table_association" "sai01_association" {
+  count          = 2
+  subnet_id      = aws_subnet.sai01_subnet[count.index].id
+  route_table_id = aws_route_table.sai01_route_table.id
 }
 
 resource "aws_security_group" "sai01_cluster_sg" {
@@ -91,6 +80,13 @@ resource "aws_security_group" "sai01_node_sg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+    ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
   egress {
     from_port   = 0
     to_port     = 0
@@ -107,7 +103,7 @@ resource "aws_eks_cluster" "sai01" {
   role_arn = local.cluster_role_arn
 
   vpc_config {
-   subnet_ids = concat( aws_subnet.sai01_public_subnet[*].id,  aws_subnet.sai01_private_subnet[*].id)
+    subnet_ids              = aws_subnet.sai01_subnet[*].id
     endpoint_public_access  = true
     endpoint_private_access = true
     security_group_ids      = [aws_security_group.sai01_cluster_sg.id]
@@ -119,7 +115,7 @@ resource "aws_eks_node_group" "sai01" {
   cluster_name    = aws_eks_cluster.sai01.name
   node_group_name = "sai01-node-group"
   node_role_arn   = local.node_role_arn
-  subnet_ids = aws_subnet.sai01_private_subnet[*].id
+  subnet_ids      = aws_subnet.sai01_subnet[*].id
 
   scaling_config {
     desired_size = 1
