@@ -1,50 +1,61 @@
 # VPC
 resource "aws_vpc" "sai01_vpc" {
-  cidr_block = "10.0.0.0/16"
-  tags = { Name = "sai01-vpc" }
+  cidr_block           = "10.0.0.0/16"
+  enable_dns_support   = true
+  enable_dns_hostnames = true
+  tags = {  Name = "sai01-vpc"  }
 }
 
-#Subnet
-resource "aws_subnet" "sai01_subnet" {
-  count                   = 2
+# INTERNET GATEWAY
+resource "aws_internet_gateway" "sai01_igw" {
+  vpc_id = aws_vpc.sai01_vpc.id
+  tags = { Name = "sai01-igw"  }
+}
+
+# PUBLIC SUBNETS
+resource "aws_subnet" "public_subnet" {
+  count = 2
   vpc_id                  = aws_vpc.sai01_vpc.id
   cidr_block              = cidrsubnet(aws_vpc.sai01_vpc.cidr_block, 8, count.index)
   availability_zone       = element(["ap-south-1a", "ap-south-1b"], count.index)
   map_public_ip_on_launch = true
-
-  tags = {  Name = "sai01-subnet-${count.index}" 
+  tags = {  Name = "public-subnet-${count.index}" 
     "kubernetes.io/cluster/sai011-cluster" = "shared"
-    "kubernetes.io/role/elb"                  = "1" }
+    "kubernetes.io/role/elb"               = "1"
+  }
 }
 
-#IG
-resource "aws_internet_gateway" "sai01_igw" {
-  vpc_id = aws_vpc.sai01_vpc.id
-  tags = {  Name = "sai01-igw"   }
+# PRIVATE SUBNETS
+resource "aws_subnet" "private_subnet" {
+  count = 2
+  vpc_id            = aws_vpc.sai01_vpc.id
+  cidr_block        = cidrsubnet(aws_vpc.sai01_vpc.cidr_block, 8, count.index + 10)
+  availability_zone = element(["ap-south-1a", "ap-south-1b"], count.index)
+  map_public_ip_on_launch = false
+  tags = { Name = "private-subnet-${count.index}" 
+    "kubernetes.io/cluster/sai011-cluster" = "shared"
+    "kubernetes.io/role/internal-elb"      = "1" }
 }
 
-# Route Table 
-resource "aws_route_table" "sai01_route_table" {
+# PUBLIC ROUTE TABLE
+resource "aws_route_table" "public_rt" {
   vpc_id = aws_vpc.sai01_vpc.id
-
   route {
     cidr_block = "0.0.0.0/0"
     gateway_id = aws_internet_gateway.sai01_igw.id
   }
-
-  # If main Ec2 is in saparate VPC need this block to route traffic and communication for kube to ec2
-   route {
+  route {
     cidr_block                = "10.5.0.0/16"
     vpc_peering_connection_id = aws_vpc_peering_connection.peer.id
   }
-  tags = {  Name = "sai01-route-table"  }
+  tags = { Name = "public-route-table"  }
 }
 
-# Subnet Associate to Route Table 
-resource "aws_route_table_association" "sai01_association" {
-  count          = 2
-  subnet_id      = aws_subnet.sai01_subnet[count.index].id
-  route_table_id = aws_route_table.sai01_route_table.id
+# PUBLIC SUBNET ASSOCIATION
+resource "aws_route_table_association" "public_assoc" {
+  count = 2
+  subnet_id      = aws_subnet.public_subnet[count.index].id
+  route_table_id = aws_route_table.public_rt.id
 }
 
 resource "aws_security_group" "sai01_cluster_sg" {
