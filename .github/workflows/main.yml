@@ -32,8 +32,8 @@ jobs:
       - name: Update kubeconfig
         run: |
           aws eks update-kubeconfig \
-            --region us-east-1 \
-            --name hospital-cluster
+            --region ap-south-1 \
+            --name sai01-cluster
       
       # Setup Terraform
       - name: Setup Terraform
