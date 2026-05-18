@@ -1,0 +1,77 @@
+
+name: 3 Tier Hospital Management System CI/CD
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Type action: start | destroy"
+        required: true
+        default: "start"
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checkout repo
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # Show repo structure (debug)
+      - name: Show Repo Structure
+        run: ls -R
+
+      # AWS Credentials
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-south-1
+
+      # Setup Terraform
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      # Clean old cache (VERY IMPORTANT FIX for your error)
+      - name: Clean Terraform Cache
+        run: |
+          rm -rf .terraform
+          rm -f .terraform.lock.hcl
+      # Terraform Init (FIXED BACKEND)
+      - name: Terraform Init (Reconfigure Backend)
+        run: terraform init -reconfigure
+        working-directory: .
+
+      # Validate
+      - name: Terraform Validate
+        run: terraform validate
+        working-directory: .
+
+      # PLAN (only for start)
+      - name: Terraform Plan
+        if: ${{ github.event.inputs.action == 'start' }}
+        run: terraform plan
+        working-directory: .
+
+      # APPLY (START)
+      - name: Terraform Apply
+        if: ${{ github.event.inputs.action == 'start' }}
+        run: terraform apply -auto-approve
+        working-directory: .
+
+      # DEBUG (optional but helpful)
+      - name: Show State Debug Info
+        run: |
+          echo "Checking terraform files..."
+          ls -R
+          echo "Terraform state info (if exists)"
+          cat terraform.tfstate || echo "No local state file (using S3 backend)"
+        working-directory: .
+
+      # DESTROY
+      - name: Terraform Destroy
+        if: ${{ github.event.inputs.action == 'destroy' }}
+        run: terraform destroy -auto-approve
+        working-directory: .
