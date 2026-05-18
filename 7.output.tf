@@ -38,5 +38,6 @@ output "vpc_id" {
 }
 
 output "subnet_ids" {
-  value = aws_subnet.sai01_subnet[*].id
+  value = concat( aws_subnet.sai01_public_subnet[*].id,
+  aws_subnet.sai01_private_subnet[*].id )
 }
