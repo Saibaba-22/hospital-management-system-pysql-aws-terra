@@ -137,7 +137,7 @@ provisioner "file" {
 
 # Files for Kubernetes 
 provisioner "file" {
-  source      = "./kubernetes/backend.yaml"
+  source      = "./kubernetes/backend.yaml.tpl"
   destination = "/home/ubuntu/hospital-mgmt/kube/backend.yaml"
 }
 
@@ -147,7 +147,7 @@ provisioner "file" {
 }
 
 provisioner "file" {
-  source      = "./kubernetes/frontend.yaml"
+  source      = "./kubernetes/frontend.yaml.tpl"
   destination = "/home/ubuntu/hospital-mgmt/kube/frontend.yaml"
 }
 
