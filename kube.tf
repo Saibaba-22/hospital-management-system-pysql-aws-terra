@@ -1,17 +1,14 @@
-resource "kubernetes_secret_v1" "db_secret" {
+resource "time_sleep" "wait_for_eks" {
+  depends_on      = [aws_eks_node_group.sai01]
+  create_duration = "120s"
+}
+
+resource "kubernetes_namespace_v1" "hospital_system" {
   metadata {
-    name = "db-secret"
+    name = "hospital-system"
   }
 
-  data = {
-    DB_HOST     = aws_db_instance.db.address
-    DB_NAME     = var.db_name
-    DB_USER     = var.db_user
-    DB_PASSWORD = var.db_password
-    DB_PORT = tostring(var.db_port)
-  }
-  type = "Opaque"
-  depends_on = [ kubernetes_namespace_v1.hospital_system ]
+  depends_on = [time_sleep.wait_for_eks]
 }
 
 resource "kubectl_manifest" "frontend" {
@@ -21,7 +18,12 @@ resource "kubectl_manifest" "frontend" {
       frontend_image = var.frontend_image
     }
   )
-    depends_on = [ kubernetes_namespace_v1.hospital_system ]
+
+  wait_for_rollout = false
+
+  depends_on = [
+    kubernetes_namespace_v1.hospital_system
+  ]
 }
 
 resource "kubectl_manifest" "backend" {
@@ -31,15 +33,11 @@ resource "kubectl_manifest" "backend" {
       backend_image = var.backend_image
     }
   )
-   depends_on = [ kubernetes_namespace_v1.hospital_system ]
-}
 
-resource "kubernetes_namespace_v1" "hospital_system" {
-  metadata {  name = "hospital-system" }
-  depends_on = [time_sleep.wait_for_eks]
-}
+  wait_for_rollout = false
 
-resource "time_sleep" "wait_for_eks" {
-  depends_on = [aws_eks_node_group.sai01]
-  create_duration = "120s"
+  depends_on = [
+    kubernetes_namespace_v1.hospital_system,
+    kubernetes_secret_v1.db_secret
+  ]
 }
