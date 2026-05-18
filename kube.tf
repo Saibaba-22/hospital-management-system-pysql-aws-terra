@@ -4,40 +4,37 @@ resource "time_sleep" "wait_for_eks" {
 }
 
 resource "kubernetes_namespace_v1" "hospital_system" {
-  metadata {
-    name = "hospital-system"
-  }
-
+  metadata {  name = "hospital-system"  }
   depends_on = [time_sleep.wait_for_eks]
 }
 
 resource "kubectl_manifest" "frontend" {
   yaml_body = templatefile(
     "${path.module}/kubernetes/frontend.yaml.tpl",
-    {
-      frontend_image = var.frontend_image
-    }
+    {  frontend_image = var.frontend_image   }
   )
-
   wait_for_rollout = false
-
-  depends_on = [
-    kubernetes_namespace_v1.hospital_system
-  ]
+  depends_on = [  kubernetes_namespace_v1.hospital_system ]
 }
 
 resource "kubectl_manifest" "backend" {
   yaml_body = templatefile(
     "${path.module}/kubernetes/backend.yaml.tpl",
-    {
-      backend_image = var.backend_image
-    }
+    {  backend_image = var.backend_image  }
   )
-
   wait_for_rollout = false
+  depends_on = [  kubernetes_namespace_v1.hospital_system,  kubernetes_secret_v1.db-secret  ]
+}
 
-  depends_on = [
-    kubernetes_namespace_v1.hospital_system,
-    kubernetes_secret_v1.db_secret
-  ]
+resource "kubernetes_secret_v1" "db-secret" {
+  metadata {  name = "db-secret"  }
+  data = {
+    DB_HOST     = aws_db_instance.db.address
+    DB_NAME     = var.db_name
+    DB_USER     = var.db_user
+    DB_PASSWORD = var.db_password
+    DB_PORT = tostring(var.db_port)
+  }
+  type = "Opaque"
+  depends_on = [ kubernetes_namespace_v1.hospital_system ]
 }
