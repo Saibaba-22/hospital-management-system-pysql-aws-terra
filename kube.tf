@@ -5,7 +5,7 @@ resource "time_sleep" "wait_for_eks" {
 
 resource "kubernetes_namespace_v1" "hospital_system" {
   metadata {  name = "hospital-system"  }
-  depends_on = [time_sleep.wait_for_eks]
+  depends_on = [ aws_eks_node_group.sai01,  time_sleep.wait_for_eks]
 }
 
 resource "kubectl_manifest" "frontend" {
